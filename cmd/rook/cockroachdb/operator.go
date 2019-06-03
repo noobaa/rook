@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/rook/rook/cmd/rook/rook"
-	"github.com/rook/rook/pkg/clusterd"
 	operator "github.com/rook/rook/pkg/operator/cockroachdb"
 	"github.com/rook/rook/pkg/operator/k8sutil"
 	"github.com/rook/rook/pkg/util/flags"
@@ -47,21 +46,11 @@ func startOperator(cmd *cobra.Command, args []string) error {
 	rook.SetLogLevel()
 	rook.LogStartupInfo(operatorCmd.Flags())
 
-	clientset, apiExtClientset, rookClientset, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to get k8s clients. %+v", err))
-	}
-
 	logger.Infof("starting cockroachdb operator")
-	context := createContext()
-	context.NetworkInfo = clusterd.NetworkInfo{}
-	context.ConfigDir = k8sutil.DataDir
-	context.Clientset = clientset
-	context.APIExtensionClientset = apiExtClientset
-	context.RookClientset = rookClientset
+	context := rook.NewContext()
 
 	// Using the current image version to deploy other rook pods
-	pod, err := k8sutil.GetRunningPod(clientset)
+	pod, err := k8sutil.GetRunningPod(context.Clientset)
 	if err != nil {
 		rook.TerminateFatal(fmt.Errorf("failed to get pod. %+v\n", err))
 	}

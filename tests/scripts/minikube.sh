@@ -117,6 +117,11 @@ function copy_images() {
         echo "copying nfs image"
         copy_image_to_cluster "${BUILD_REGISTRY}/nfs-amd64" rook/nfs:master
     fi
+
+    if [[ "$1" == "" || "$1" == "noobaa" ]]; then
+        echo "copying noobaa image"
+        copy_image_to_cluster "${BUILD_REGISTRY}/noobaa-amd64" rook/noobaa:master
+    fi
 }
 
 # configure minikube
@@ -176,17 +181,18 @@ case "${1:-}" in
     helm_tag="$(cat _output/version)"
     copy_image_to_cluster "${BUILD_REGISTRY}/ceph-amd64" "rook/ceph:${helm_tag}"
     copy_image_to_cluster "${BUILD_REGISTRY}/minio-amd64" "rook/minio:${helm_tag}"
+    copy_image_to_cluster "${BUILD_REGISTRY}/noobaa-amd64" "rook/noobaa:${helm_tag}"
     ;;
   clean)
     minikube delete
     ;;
   *)
     echo "usage:" >&2
-    echo "  $0 up [ceph | cockroachdb | cassandra | minio | nfs]" >&2
+    echo "  $0 up [ceph | cockroachdb | cassandra | minio | nfs | noobaa]" >&2
     echo "  $0 down" >&2
     echo "  $0 clean" >&2
     echo "  $0 ssh" >&2
-    echo "  $0 update [ceph | cockroachdb | cassandra | minio | nfs]" >&2
+    echo "  $0 update [ceph | cockroachdb | cassandra | minio | nfs | noobaa]" >&2
     echo "  $0 restart <pod-name-regex> (the pod name is a regex to match e.g. restart ^rook-ceph-osd)" >&2
     echo "  $0 wordpress" >&2
     echo "  $0 cockroachdb-loadgen" >&2

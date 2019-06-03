@@ -26,8 +26,12 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	rookclient "github.com/rook/rook/pkg/client/clientset/versioned"
+	"github.com/rook/rook/pkg/clusterd"
+	"github.com/rook/rook/pkg/operator/k8sutil"
+	"github.com/rook/rook/pkg/util/exec"
 	"github.com/rook/rook/pkg/util/flags"
 	"github.com/rook/rook/pkg/version"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -84,28 +88,58 @@ func LogStartupInfo(cmdFlags *pflag.FlagSet) {
 }
 
 // GetClientset create the k8s client
-func GetClientset() (kubernetes.Interface, apiextensionsclient.Interface, rookclient.Interface, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get k8s config. %+v", err)
-	}
-
+func GetClientset() (kubernetes.Interface, apiextensionsclient.Interface, rookclient.Interface) {
+	config := GetKubeConfig()
 	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create k8s clientset. %+v", err)
-	}
+	TerminateIfError("failed to create k8s clientset. %+v", err)
 	apiExtClientset, err := apiextensionsclient.NewForConfig(config)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create k8s API extension clientset. %+v", err)
-	}
+	TerminateIfError("failed to create k8s API extension clientset. %+v", err)
 	rookClientset, err := rookclient.NewForConfig(config)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create rook clientset. %+v", err)
-	}
-	return clientset, apiExtClientset, rookClientset, nil
+	TerminateIfError("failed to create rook clientset. %+v", err)
+	return clientset, apiExtClientset, rookClientset
 }
 
-// TerminateFatal terminates the process with an exit code of 1 and writes the given reason to stderr and // the termination log file.
+// GetKubeConfig supports both in-cluster and out of the cluster with config file (~/.kube/config)
+func GetKubeConfig() *rest.Config {
+
+	// Try to read config from in-cluster env
+	config, err := rest.InClusterConfig()
+	if err == nil {
+		return config
+	}
+
+	// Get user config file
+	config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{}).ClientConfig()
+	TerminateIfError("failed to get k8s config. %+v", err)
+
+	return config
+}
+
+// NewContext create the k8s clients and returns the context
+func NewContext() *clusterd.Context {
+	clientset, apiExtClientset, rookClientset := GetClientset()
+	return &clusterd.Context{
+		Clientset:             clientset,
+		APIExtensionClientset: apiExtClientset,
+		RookClientset:         rookClientset,
+		Executor:              &exec.CommandExecutor{},
+		NetworkInfo:           clusterd.NetworkInfo{},
+		ConfigDir:             k8sutil.DataDir,
+	}
+}
+
+// TerminateIfError terminates if err is not nil
+func TerminateIfError(format string, err error) {
+	if err != nil {
+		TerminateFatal(fmt.Errorf(format, err))
+	}
+
+}
+
+// TerminateFatal terminates the process with an exit code of 1
+// and writes the given reason to stderr and the termination log file.
 func TerminateFatal(reason error) {
 	fmt.Fprintln(os.Stderr, reason)
 

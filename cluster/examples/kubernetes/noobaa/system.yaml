@@ -1,0 +1,10 @@
+apiVersion: noobaa.rook.io/v1alpha1
+kind: System
+metadata:
+  name: noobaa
+  namespace: rook-noobaa
+spec:
+  # email: "demo@noobaa.com"
+  # password: "123456"
+  # image: noobaa/noobaa-core:3.0.0
+  # version: "3.0.0"

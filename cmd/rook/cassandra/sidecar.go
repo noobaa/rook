@@ -48,10 +48,7 @@ func startSidecar(cmd *cobra.Command, args []string) error {
 	rook.SetLogLevel()
 	rook.LogStartupInfo(operatorCmd.Flags())
 
-	kubeClient, _, rookClient, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to get k8s clients. %+v", err))
-	}
+	kubeClient, _, rookClient := rook.GetClientset()
 
 	podName := os.Getenv(k8sutil.PodNameEnvVar)
 	if podName == "" {

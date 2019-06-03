@@ -1,0 +1,185 @@
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: noobaa-account
+  labels:
+    app: noobaa
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  creationTimestamp: null
+  name: noobaa-role
+  labels:
+    app: noobaa
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: noobaa-role-binding
+  labels:
+    app: noobaa
+subjects:
+  - kind: ServiceAccount
+    name: noobaa-account
+roleRef:
+  kind: Role
+  name: noobaa-role
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: s3
+  labels:
+    app: noobaa
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 6001
+      name: s3
+    - port: 443
+      targetPort: 6443
+      name: s3-https
+  selector:
+    noobaa-s3: "true"
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: noobaa-mgmt
+  labels:
+    app: noobaa
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/scheme: http
+    prometheus.io/port: "8080"
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8080
+      name: mgmt
+    - port: 8443
+      name: mgmt-https
+    - port: 8444
+      name: md-https
+    - port: 8445
+      name: bg-https
+    - port: 8446
+      name: hosted-agents-https
+    - port: 80
+      targetPort: 6001
+      name: s3
+    - port: 443
+      targetPort: 6443
+      name: s3-https
+  selector:
+    noobaa-mgmt: "true"
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: noobaa-server
+  labels:
+    app: noobaa
+    noobaa-module: noobaa-server
+spec:
+  selector:
+    matchLabels:
+      noobaa-module: noobaa-server
+  serviceName: noobaa-mgmt
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: noobaa
+        noobaa-module: noobaa-server
+        noobaa-s3: "true"
+        noobaa-mgmt: "true"
+    spec:
+      containers:
+        - name: noobaa-server
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: "/version"
+          image: noobaa/noobaa-core:3.0.0
+          imagePullPolicy: IfNotPresent
+          resources:
+            # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+            - containerPort: 8080
+            - containerPort: 8443
+            - containerPort: 8444
+            - containerPort: 8445
+            - containerPort: 8446
+            - containerPort: 60100
+          volumeMounts:
+            - mountPath: /data
+              name: datadir
+            - mountPath: /log
+              name: logdir
+          env:
+            - name: CONTAINER_PLATFORM
+              value: KUBERNETES
+            - name: CREATE_SYS_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: noobaa-create-sys-creds
+                  key: name
+                  optional: true
+            - name: CREATE_SYS_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: noobaa-create-sys-creds
+                  key: email
+                  optional: true
+            - name: CREATE_SYS_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: noobaa-create-sys-creds
+                  key: password
+                  optional: true
+            # replacing the empty value with any value will set the cotainer to dbg mode
+            - name: container_dbg
+              value: ""
+      serviceAccountName: noobaa-account
+
+  volumeClaimTemplates:
+    # this will provision a dynamic persistent volume (volume is automatically provisioned by a provisioner)
+    # in minikube it is provisioned as hostPath volume under hosts /tmp which is not persistent between
+    # minkube restarts. if we want it to be persistent between restarts we need to statically provision a
+    # volume according to this https://kubernetes.io/docs/setup/minikube/#persistent-volumes
+    - metadata:
+        name: logdir
+        labels:
+          app: noobaa
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: datadir
+        labels:
+          app: noobaa
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi

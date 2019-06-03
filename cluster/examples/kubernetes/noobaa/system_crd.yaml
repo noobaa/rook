@@ -1,0 +1,38 @@
+# NooBaa CRD is the API for the operator to provision noobaa systems
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: systems.noobaa.rook.io
+spec:
+  group: noobaa.rook.io
+  scope: Namespaced
+  names:
+    kind: System
+    listKind: SystemList
+    singular: system
+    plural: systems
+    shortNames:
+      - nb
+      - noobaa
+  version: v1alpha1
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+  additionalPrinterColumns: []
+  subresources:
+    scale:
+    status:
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+        spec:
+          type: object
+        status:
+          type: object

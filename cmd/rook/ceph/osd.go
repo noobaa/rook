@@ -198,10 +198,7 @@ func writeOSDConfig(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("osd id not specified")
 	}
 
-	clientset, _, _, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to init k8s client. %+v\n", err))
-	}
+	clientset, _, _ := rook.GetClientset()
 
 	context := createContext()
 	context.Clientset = clientset
@@ -255,10 +252,7 @@ func prepareOSD(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	clientset, _, rookClientset, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to init k8s client. %+v\n", err))
-	}
+	clientset, _, rookClientset := rook.GetClientset()
 
 	context := createContext()
 	context.Clientset = clientset

@@ -49,22 +49,11 @@ func startOperator(cmd *cobra.Command, args []string) error {
 
 	rook.LogStartupInfo(operatorCmd.Flags())
 
-	clientset, apiExtClientset, rookClientset, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to get k8s client. %+v", err))
-	}
-
 	logger.Infof("starting operator")
-	context := createContext()
-	context.Clientset = clientset
-	context.APIExtensionClientset = apiExtClientset
-	context.RookClientset = rookClientset
-	if err != nil {
-		rook.TerminateFatal(err)
-	}
+	context := rook.NewContext()
 
 	// Using the current image version to deploy other rook pods
-	pod, err := k8sutil.GetRunningPod(clientset)
+	pod, err := k8sutil.GetRunningPod(context.Clientset)
 	if err != nil {
 		rook.TerminateFatal(fmt.Errorf("failed to get pod. %+v\n", err))
 	}

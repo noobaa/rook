@@ -52,10 +52,7 @@ func startOperator(cmd *cobra.Command, args []string) error {
 	rook.SetLogLevel()
 	rook.LogStartupInfo(operatorCmd.Flags())
 
-	kubeClient, _, rookClient, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to get k8s clients. %+v\n", err))
-	}
+	kubeClient, _, rookClient := rook.GetClientset()
 
 	logger.Infof("starting cassandra operator")
 

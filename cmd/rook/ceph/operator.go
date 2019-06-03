@@ -71,12 +71,8 @@ func startOperator(cmd *cobra.Command, args []string) error {
 
 	rook.LogStartupInfo(operatorCmd.Flags())
 
-	clientset, apiExtClientset, rookClientset, err := rook.GetClientset()
-	if err != nil {
-		rook.TerminateFatal(fmt.Errorf("failed to get k8s client. %+v\n", err))
-	}
-
 	logger.Infof("starting operator")
+	clientset, apiExtClientset, rookClientset := rook.GetClientset()
 	context := createContext()
 	context.NetworkInfo = clusterd.NetworkInfo{}
 	context.ConfigDir = k8sutil.DataDir
