@@ -1,7 +1,7 @@
-# ♜ Rook NooBaa Design / System CRD
+♜ [Rook NooBaa Design](README.md) /
+# System CRD
 
-The operator will define a new kubernetes API group `noobaa.rook.io`.
-
+The operator will define a new kubernetes API group `noobaa.rook.io`. \
 In that group it will define a CRD `System` representing a NooBaa system.
 
 ```yaml
@@ -25,7 +25,9 @@ spec:
 
 ## Minimal Spec
 
-The operator will provide working defaults when a system created without a spec:
+The operator will provide working defaults when a system created with an empty spec. \
+It assumes the user expects a simple zero-config deployment, with a simple way to configure the system later from the NooBaa UI. \
+This is the minimal system yaml:
 
 ```yaml
 apiVersion: noobaa.rook.io/v1alpha1
@@ -35,7 +37,9 @@ metadata:
   namespace: rook-noobaa
 ```
 
-## Full Spec Features
+## Full Spec Example
+
+Here is a full blown example of a NooBaa system spec with inline comments.
 
 ```yaml
 apiVersion: noobaa.rook.io/v1alpha1
@@ -45,86 +49,117 @@ metadata:
   namespace: rook-noobaa
 spec:
 
-  storageResources:
+  # Access specifies settings for accessing the system services
+  access:
 
-    - name: noobaa-ceph-resource
-      region: on-prem-ohio
+    # Accounts is a list of named accounts that should get access credentials to NooBaa.
+    accounts:
+      - name: app1-s3-account
+        namespace: app1
+        s3CredentialsSecretName: app1-s3-credentials
+        defaultBackingStoreForNewBuckets: aws-s3
+
+    virtualHost:
+      - virtual.host.name
+
+    security:
+      certificate: TODO
+      disableNonSecureAccess: true
+
+  # Backing stores is a list of storage targets to be used as underlying storage for NooBaa buckets.
+  # NooBaa uses these storage targets to store deduped+compressed+encrypted chunks of data (encryption keys are stored separatly).
+  # Each item will have a locally unique name to identify it when defining bucket placement policies.
+  # Multiple types of storage targets are supported: aws-s3, s3-compatible, google-cloud-storage, azure-blob, obc, pvc.
+  # See specific examples below.
+  backingStores:
+
+    # AWS S3 bucket
+    - name: aws-s3
+      type: aws-s3
+      region: us-east-1
+      bucketName: noobaa1-aws-backing-store
+      credentialsSecretName: aws-credentials-secret
+
+    # S3 compatible storage service
+    - name: rgw
+      type: s3-compatible
+      endpoint: s3.rook-ceph
+      bucketName: noobaa1-rgw-backing-store
+      credentialsSecretName: rgw-credentials-secret
+      options:
+        sslEnabled: false
+        s3ForcePathStyle: true
+        signatureVersion: v2
+
+    # Google cloud storage
+    - name: gcs
+      type: google-cloud-storage
+      region: us-west1
+      bucketName: noobaa1-gcs-backing-store
+      credentialsSecretName: gcs-credentials-secret
+
+    # Azure blob
+    - name: azure-blob
+      type: azure-blob
+      bucketName: noobaa1-azure-blob-backing-store
+      credentialsSecretName: azure-blob-credentials-secret
+
+    # OBC - Object Bucket Claim
+    - name: aws-obc
       type: obc
-      storageClassName: ceph-rgw-bucket-provisioner
-      # bucketName: rgw-target-bucket-name
+      bucketName: aws-obc-backing-store
+      storageClassName: aws-obc-provisioner
 
-    - name: noobaa-aws-resource
-      region: aws-paris
-      type: obc
-      storageClassName: aws-bucket-provisioner
-      # bucketName: aws-target-bucket-name
-
-    - name: local-pv-storage
-      region: on-prem-ohio
+    # PVC - Persistent Volume Claim
+    # This item will create a StatefulSet of NooBaa Agents (pods) each with a PVC of a certain size as specified.
+    # NooBaa Agents connect to the noobaa system and allow the system to use the PV filesystem to store encrypted chunks.
+    - name: local-pv
       type: pvc
       storageClassName: ceph-block-provisioner
-      size: "30 GB"
       count: 3
+      size: 30
+      sizeUnits: GB
 
-    # - name: s3-storage
-    #   region: 
-    #   type: s3-bucket
-    #   endpoint: 
-    #   credentialsSecretName: xxx
-    #   bucketName: aws-target-bucket-name
+  # TODO
+  bucketPolicies:
 
-  storageClasses:
+    # 
+    templates:
 
-    # a class that uses a single underlying resource
-    - name: noobaa-local-storage
-      storageResourceName: local-pv-storage
+      # a class that uses a single underlying resource
+      - name: default
+        tiering:
+          - mirroring:
+            - backingStoreName: noobaa-aws-resource
 
-    # a class that uses multiple resources in mirror policy
-    - name: noobaa-cloud-mirror
-      tiering:
-        - mirroring:
-          - storageResourceName: noobaa-ceph-resource
-          - storageResourceName: noobaa-aws-resource
+      # a class that uses multiple resources in mirror policy
+      - name: cloud-mirror
+        tiering:
+          - mirroring:
+            - backingStoreName: noobaa-ceph-resource
+            - backingStoreName: noobaa-aws-resource
 
-    # a class that uses multiple resources in tiering policy
-    - name: noobaa-tiering-to-cloud
-      tiering:
-        - mirroring:
-          - storageResourceName: noobaa-ceph-resource
-        - mirroring:
-          - storageResourceName: noobaa-aws-resource
+      # a class that uses multiple resources in tiering policy
+      - name: tiering-to-cloud
+        tiering:
+          - mirroring:
+            - backingStoreName: noobaa-ceph-resource
+          - mirroring:
+            - backingStoreName: noobaa-aws-resource
 
+  # TODO
+  bucketProvisioner:
+    exportedStorageClasses:
+      - name: noobaa-object-storage
+        bucketPolicyTemplateName: object-storage
+      - name: noobaa-cloud-mirror
+        bucketPolicyTemplateName: cloud-mirror
+      - name: noobaa-tiering-to-cloud
+        bucketPolicyTemplateName: tiering-to-cloud
+
+  # TODO
   endpoints:
-    maxAutoScale: 100000
-```
-
-
-## Sample `StorageClass`
-
-```yaml
-kind: StorageClass
-apiVersion: storage.k8s.io/v1
-metadata:
-  name: noobaa-cloud-mirror
-provisioner: s3.noobaa.io/bucket
-parameters:
-  noobaaSystemName: noobaa-1
-reclaimPolicy: Delete
-```
-
-## Sample `OBC`
-
-See https://github.com/yard-turkey/lib-bucket-provisioner/blob/master/deploy/example-claim.yaml 
-
-```yaml
-apiVersion: objectbucket.io/v1alpha1
-kind: ObjectBucketClaim
-metadata:
-  name: "example-bucket"
-  namespace: default
-spec:
-  generateBucketName: "objectbucket-io-"
-  storageClassName: noobaa-cloud-mirror
-  SSL: false
-  versioned: false
+    min: 1
+    maxAutoScale: 10
+  
 ```
